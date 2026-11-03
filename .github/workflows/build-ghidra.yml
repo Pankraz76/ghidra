@@ -28,3 +28,22 @@ jobs:
 
       - name: Build Ghidra
         run: ./gradlew buildGhidra --parallel
+
+      - name: Test binary parsing (ghidra.app.util.bin)
+        run: xvfb-run -a ./gradlew :Base:test --tests 'ghidra.app.util.bin.*'
+
+      - name: Check test results
+        # Ghidra's test tasks set ignoreFailures=true, so Gradle exits 0 even when tests fail.
+        # Fail the build here instead, and make sure tests actually ran.
+        run: |
+          dir=Ghidra/Features/Base/build/test-results/test
+          ls "$dir"/TEST-*.xml > /dev/null
+          for c in BinaryReaderTest InputStreamByteProviderTest format.pef.SectionHeaderTest; do
+            ls "$dir"/TEST-ghidra.app.util.bin.$c.xml > /dev/null
+          done
+          if grep -lE '<(failure|error)[ >]' "$dir"/TEST-*.xml; then
+            echo "::error::Test failures, see files listed above"
+            grep -hE -A5 '<(failure|error)[ >]' "$dir"/TEST-*.xml | head -200
+            exit 1
+          fi
+          grep -ho 'tests="[0-9]*"' "$dir"/TEST-*.xml | awk -F'"' '{s+=$2} END {print s " tests passed"}'
